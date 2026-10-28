@@ -14,6 +14,7 @@ class CulinaryPlace {
   final double longitude;
   final String imageUrl;
   final List<String> imageUrls; // Galeri foto (min 3)
+  final List<String> images;    // Multi-foto list (Fitur Multi-Foto Carousel)
   final bool isOperational;
   final String openHours;
   final List<MenuItem> featuredMenus;
@@ -36,6 +37,7 @@ class CulinaryPlace {
     required this.longitude,
     required this.imageUrl,
     this.imageUrls = const [],
+    this.images = const [],
     required this.isOperational,
     required this.openHours,
     required this.featuredMenus,
@@ -46,9 +48,16 @@ class CulinaryPlace {
     this.description = '',
   });
 
-  /// Returns imageUrls if available, otherwise wraps imageUrl in a list
-  List<String> get galleryImages =>
-      imageUrls.isNotEmpty ? imageUrls : [imageUrl];
+  /// Mengembalikan list foto galeri secara komprehensif dari `images`, `imageUrls`, atau `imageUrl`
+  List<String> get galleryImages {
+    if (images.isNotEmpty) return images;
+    if (imageUrls.isNotEmpty) return imageUrls;
+    if (imageUrl.isNotEmpty) return [imageUrl];
+    return const [];
+  }
+
+  /// Getter `image` untuk backward-compatibility dengan skema tunggal
+  String get image => imageUrl.isNotEmpty ? imageUrl : (images.isNotEmpty ? images.first : '');
 
   CulinaryPlace copyWith({
     String? id,
@@ -63,6 +72,7 @@ class CulinaryPlace {
     double? longitude,
     String? imageUrl,
     List<String>? imageUrls,
+    List<String>? images,
     bool? isOperational,
     String? openHours,
     List<MenuItem>? featuredMenus,
@@ -85,6 +95,7 @@ class CulinaryPlace {
       longitude: longitude ?? this.longitude,
       imageUrl: imageUrl ?? this.imageUrl,
       imageUrls: imageUrls ?? this.imageUrls,
+      images: images ?? (imageUrls ?? this.images),
       isOperational: isOperational ?? this.isOperational,
       openHours: openHours ?? this.openHours,
       featuredMenus: featuredMenus ?? this.featuredMenus,
@@ -109,7 +120,9 @@ class CulinaryPlace {
       'latitude': latitude,
       'longitude': longitude,
       'imageUrl': imageUrl,
-      'imageUrls': imageUrls,
+      'image': imageUrl,
+      'imageUrls': imageUrls.isNotEmpty ? imageUrls : images,
+      'images': images.isNotEmpty ? images : imageUrls,
       'isOperational': isOperational,
       'openHours': openHours,
       'featuredMenus': featuredMenus.map((m) => m.toMap()).toList(),
@@ -121,23 +134,41 @@ class CulinaryPlace {
     };
   }
 
+  Map<String, dynamic> toJson() => toMap();
+
+  /// Factory fromFirestore / fromJson / fromMap dengan logika fallback backward-compatible:
+  /// Jika field `images` ada (List), gunakan itu.
+  /// Jika masih menggunakan field lama `image` (String), bungkus menjadi List<String>.
   factory CulinaryPlace.fromMap(Map<String, dynamic> map) {
+    List<String> parsedImages = [];
+    if (map['images'] is List && (map['images'] as List).isNotEmpty) {
+      parsedImages = (map['images'] as List).map((e) => e.toString()).toList();
+    } else if (map['imageUrls'] is List && (map['imageUrls'] as List).isNotEmpty) {
+      parsedImages = (map['imageUrls'] as List).map((e) => e.toString()).toList();
+    } else if (map['image'] != null && map['image'].toString().isNotEmpty) {
+      parsedImages = [map['image'].toString()];
+    } else if (map['imageUrl'] != null && map['imageUrl'].toString().isNotEmpty) {
+      parsedImages = [map['imageUrl'].toString()];
+    }
+
+    final primaryImageUrl = map['imageUrl']?.toString() ??
+        map['image']?.toString() ??
+        (parsedImages.isNotEmpty ? parsedImages.first : '');
+
     return CulinaryPlace(
       id: map['id'] ?? '',
       name: map['name'] ?? '',
       category: map['category'] ?? '',
       district: map['district'] ?? 'Kota Yogyakarta',
       rating: (map['rating'] as num?)?.toDouble() ?? 0.0,
-      reviewCount: map['reviewCount'] ?? 0,
+      reviewCount: (map['reviewCount'] as num?)?.toInt() ?? 0,
       priceRange: map['priceRange'] ?? '',
       address: map['address'] ?? '',
       latitude: (map['latitude'] as num?)?.toDouble() ?? 0.0,
       longitude: (map['longitude'] as num?)?.toDouble() ?? 0.0,
-      imageUrl: map['imageUrl'] ?? '',
-      imageUrls: (map['imageUrls'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [],
+      imageUrl: primaryImageUrl,
+      imageUrls: parsedImages,
+      images: parsedImages,
       isOperational: map['isOperational'] ?? true,
       openHours: map['openHours'] ?? '',
       featuredMenus: (map['featuredMenus'] as List<dynamic>?)
@@ -153,5 +184,16 @@ class CulinaryPlace {
       highlightBadge: map['highlightBadge'],
       description: map['description'] ?? '',
     );
+  }
+
+  factory CulinaryPlace.fromJson(Map<String, dynamic> json) =>
+      CulinaryPlace.fromMap(json);
+
+  factory CulinaryPlace.fromFirestore(Map<String, dynamic> data, [String? id]) {
+    final map = Map<String, dynamic>.from(data);
+    if (id != null && !map.containsKey('id')) {
+      map['id'] = id;
+    }
+    return CulinaryPlace.fromMap(map);
   }
 }

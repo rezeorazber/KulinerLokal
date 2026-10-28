@@ -77,10 +77,9 @@ class _TopAppHeaderState extends State<TopAppHeader> {
             onPressed: () async {
               Navigator.pop(ctx);
 
-              // Simulasi deteksi lokasi
               final provider = Provider.of<CulinaryProvider>(context, listen: false);
 
-              // Tampilkan loading singkat
+              // Tampilkan notifikasi pencarian GPS
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Row(
@@ -90,28 +89,36 @@ class _TopAppHeaderState extends State<TopAppHeader> {
                         child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.white)),
                       ),
                       SizedBox(width: 12),
-                      Text('Mendeteksi lokasi perangkat...'),
+                      Text('Mencari sinyal GPS perangkat...'),
                     ],
                   ),
-                  duration: Duration(milliseconds: 800),
-                ),
-              );
-
-              await Future.delayed(const Duration(milliseconds: 900));
-
-              if (!context.mounted) return;
-              provider.updateLocation('Sleman, DI Yogyakarta');
-              setState(() {
-                _locationPermissionGranted = true;
-              });
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Lokasi terdeteksi: Sleman, DI Yogyakarta'),
-                  backgroundColor: Color(0xFF27AE60),
                   duration: Duration(seconds: 2),
                 ),
               );
+
+              final success = await provider.fetchRealLocation();
+
+              if (!context.mounted) return;
+              if (success) {
+                setState(() {
+                  _locationPermissionGranted = true;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Lokasi GPS aktif: ${provider.activeLocation}'),
+                    backgroundColor: const Color(0xFF27AE60),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('GPS tidak aktif / izin ditolak. Menggunakan lokasi default Yogyakarta Pusat.'),
+                    backgroundColor: Color(0xFFDE5D26),
+                    duration: Duration(seconds: 3),
+                  ),
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
@@ -155,7 +162,7 @@ class _TopAppHeaderState extends State<TopAppHeader> {
                   const Icon(Icons.location_on, color: AppColors.primary),
                   const SizedBox(width: 8),
                   Text(
-                    'Lokasi Terkini',
+                    'Pilih Lokasi',
                     style: AppTextStyles.headingSmall.copyWith(
                       color: AppColors.textPrimary,
                     ),
@@ -163,6 +170,29 @@ class _TopAppHeaderState extends State<TopAppHeader> {
                 ],
               ),
               const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.my_location, color: AppColors.primary),
+                title: const Text(
+                  'Gunakan Lokasi GPS Saya',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                ),
+                subtitle: const Text(
+                  'Deteksi koordinat real via GPS perangkat',
+                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                ),
+                trailing: provider.isLoadingLocation
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                      )
+                    : null,
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await provider.fetchRealLocation();
+                },
+              ),
+              const Divider(),
               ...locations.map((loc) {
                 final isSelected = loc == provider.activeLocation;
                 return ListTile(
@@ -289,18 +319,18 @@ class _TopAppHeaderState extends State<TopAppHeader> {
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.place,
-                      color: AppColors.primary,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 4),
-                    Consumer<CulinaryProvider>(
-                      builder: (context, culinary, _) {
-                        return ConstrainedBox(
+                child: Consumer<CulinaryProvider>(
+                  builder: (context, culinary, _) {
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.place,
+                          color: AppColors.primary,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 4),
+                        ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 130),
                           child: Text(
                             culinary.activeLocation,
@@ -311,15 +341,26 @@ class _TopAppHeaderState extends State<TopAppHeader> {
                               color: AppColors.primaryDark,
                             ),
                           ),
-                        );
-                      },
-                    ),
-                    const Icon(
-                      Icons.keyboard_arrow_down,
-                      color: AppColors.primary,
-                      size: 16,
-                    ),
-                  ],
+                        ),
+                        const SizedBox(width: 2),
+                        if (culinary.isLoadingLocation)
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.primary,
+                            ),
+                          )
+                        else
+                          const Icon(
+                            Icons.keyboard_arrow_down,
+                            color: AppColors.primary,
+                            size: 16,
+                          ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ),

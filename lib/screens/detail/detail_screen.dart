@@ -1,3 +1,4 @@
+import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
@@ -21,19 +22,6 @@ class DetailScreen extends StatefulWidget {
 
 class _DetailScreenState extends State<DetailScreen> {
   int _currentImageIndex = 0;
-  late PageController _pageController;
-
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController();
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
 
   // Bottom Sheet for Adding a New Review
   void _showAddReviewBottomSheet(BuildContext context, String placeId) {
@@ -442,68 +430,58 @@ class _DetailScreenState extends State<DetailScreen> {
                   background: Stack(
                     fit: StackFit.expand,
                     children: [
-                      // Image Carousel
-                      PageView.builder(
-                        controller: _pageController,
-                        itemCount: gallery.length,
-                        onPageChanged: (index) {
-                          setState(() => _currentImageIndex = index);
-                        },
-                        itemBuilder: (context, index) {
-                          return Image.network(
-                            gallery[index],
-                            fit: BoxFit.cover,
-                            loadingBuilder: (context, child, progress) {
-                              if (progress == null) return child;
-                              return Container(
-                                color: AppColors.chipBackground,
-                                child: const Center(
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation(AppColors.primary),
-                                  ),
-                                ),
-                              );
+                      // Header Utama Multi-Foto: CarouselSlider
+                      Center(
+                        child: CarouselSlider(
+                          options: CarouselOptions(
+                            height: 230.0,
+                            autoPlay: true,
+                            enlargeCenterPage: true,
+                            viewportFraction: 0.9,
+                            onPageChanged: (index, reason) {
+                              setState(() => _currentImageIndex = index);
                             },
-                            errorBuilder: (_, __, ___) => Container(
-                              color: AppColors.chipBackground,
-                              child: const Icon(Icons.restaurant, size: 64, color: AppColors.primary),
-                            ),
-                          );
-                        },
-                      ),
-                      // Gradient overlay
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.black.withValues(alpha: 0.4),
-                              Colors.transparent,
-                              Colors.black.withValues(alpha: 0.7),
-                            ],
                           ),
-                        ),
-                      ),
-                      // Name only
-                      Positioned(
-                        bottom: 16,
-                        left: 16,
-                        right: 16,
-                        child: Text(
-                          place.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          items: gallery.map((imageUrl) {
+                            return Builder(
+                              builder: (BuildContext context) {
+                                return ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.network(
+                                    imageUrl,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    loadingBuilder: (context, child, progress) {
+                                      if (progress == null) return child;
+                                      return Container(
+                                        color: AppColors.chipBackground,
+                                        child: const Center(
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation(AppColors.primary),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      color: AppColors.chipBackground,
+                                      child: const Icon(
+                                        Icons.restaurant,
+                                        size: 64,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          }).toList(),
                         ),
                       ),
                       // Dot Indicators
                       if (gallery.length > 1)
                         Positioned(
-                          bottom: 60,
+                          bottom: 10,
                           left: 0,
                           right: 0,
                           child: Row(
@@ -535,6 +513,17 @@ class _DetailScreenState extends State<DetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Nama Resto
+                      Text(
+                        place.name,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
                       // Category & Price Row
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,

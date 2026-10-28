@@ -1,14 +1,26 @@
 import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/mock_culinary_data.dart';
 import '../models/culinary_place.dart';
 import '../models/review_model.dart';
+import '../services/location_service.dart';
 
 class CulinaryProvider with ChangeNotifier {
   static const String _prefFavoritesKey = 'culinary_favorite_ids';
 
+  // Nilai default fallback ke Yogyakarta Pusat (Titik Nol KM / Malioboro)
+  static const double defaultLatitude = -7.7956;
+  static const double defaultLongitude = 110.3695;
+  static const String defaultLocationName = 'Malioboro, Yogyakarta';
+
   List<CulinaryPlace> _places = [];
-  String _activeLocation = 'Malioboro, Yogyakarta';
+  double _userLatitude = defaultLatitude;
+  double _userLongitude = defaultLongitude;
+  String _activeLocation = defaultLocationName;
+  bool _isLoadingLocation = false;
+  bool _hasGpsSignal = false;
+
   String _searchQuery = '';
   String _selectedCategory = 'Semua';
   String _selectedFilterChip = ''; // '', 'Terdekat', 'Rating Tinggi', 'Terjangkau'
@@ -20,6 +32,7 @@ class CulinaryProvider with ChangeNotifier {
 
   void _loadInitialData() async {
     _places = List<CulinaryPlace>.from(MockCulinaryData.places);
+    _recalculateDistances();
     await _loadFavoritesFromPrefs();
     notifyListeners();
   }
@@ -50,6 +63,11 @@ class CulinaryProvider with ChangeNotifier {
   // Getters
   List<CulinaryPlace> get allPlaces => _places;
   String get activeLocation => _activeLocation;
+  double get userLatitude => _userLatitude;
+  double get userLongitude => _userLongitude;
+  bool get isLoadingLocation => _isLoadingLocation;
+  bool get hasGpsSignal => _hasGpsSignal;
+
   String get searchQuery => _searchQuery;
   String get selectedCategory => _selectedCategory;
   String get selectedFilterChip => _selectedFilterChip;
@@ -249,9 +267,90 @@ class CulinaryProvider with ChangeNotifier {
     }
   }
 
+  // Mengambil posisi lokasi GPS perangkat secara real
+  Future<bool> fetchRealLocation() async {
+    _isLoadingLocation = true;
+    notifyListeners();
+
+    try {
+      final position = await LocationService().getCurrentPosition();
+      if (position != null) {
+        _userLatitude = position.latitude;
+        _userLongitude = position.longitude;
+        _hasGpsSignal = true;
+
+        // Hitung ulang jarak real ke seluruh resto dari koordinat pengguna
+        _recalculateDistances();
+        _activeLocation = _determineLocationName(position.latitude, position.longitude);
+
+        _isLoadingLocation = false;
+        notifyListeners();
+        return true;
+      } else {
+        // Fallback default Yogyakarta Pusat jika GPS mati / izin ditolak
+        _setDefaultLocation();
+        _isLoadingLocation = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      debugPrint('[CulinaryProvider] Error fetchRealLocation: $e');
+      _setDefaultLocation();
+      _isLoadingLocation = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  void _setDefaultLocation() {
+    _userLatitude = defaultLatitude;
+    _userLongitude = defaultLongitude;
+    _activeLocation = defaultLocationName;
+    _hasGpsSignal = false;
+    _recalculateDistances();
+  }
+
+  // Menghitung ulang jarak (km) seluruh tempat kuliner secara real menggunakan koordinat user
+  void _recalculateDistances() {
+    _places = _places.map((place) {
+      final distanceInMeters = Geolocator.distanceBetween(
+        _userLatitude,
+        _userLongitude,
+        place.latitude,
+        place.longitude,
+      );
+      final km = double.parse((distanceInMeters / 1000).toStringAsFixed(1));
+      return place.copyWith(distanceKm: km);
+    }).toList();
+  }
+
+  String _determineLocationName(double lat, double lng) {
+    if (lat > -7.75) {
+      return 'Sleman, DI Yogyakarta';
+    } else if (lat < -7.83) {
+      return 'Bantul, DI Yogyakarta';
+    } else {
+      return 'Kota Yogyakarta';
+    }
+  }
+
   // Update active location
   void updateLocation(String newLocation) {
     _activeLocation = newLocation;
+    if (newLocation.toLowerCase().contains('sleman')) {
+      _userLatitude = -7.7121;
+      _userLongitude = 110.3589;
+    } else if (newLocation.toLowerCase().contains('bantul')) {
+      _userLatitude = -7.8465;
+      _userLongitude = 110.3541;
+    } else if (newLocation.toLowerCase().contains('kaliurang')) {
+      _userLatitude = -7.6041;
+      _userLongitude = 110.4239;
+    } else {
+      _userLatitude = defaultLatitude;
+      _userLongitude = defaultLongitude;
+    }
+    _recalculateDistances();
     notifyListeners();
   }
 

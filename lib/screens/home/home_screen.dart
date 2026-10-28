@@ -16,11 +16,11 @@ class HomeScreen extends StatelessWidget {
     required this.onExploreMore,
   });
 
-  // Fungsi simulasi pengambilan lokasi
-  static Future<void> simulasiAmbilLokasi(BuildContext context) async {
+  // Fungsi deteksi lokasi GPS real menggunakan LocationService
+  static Future<void> ambilLokasiGps(BuildContext context) async {
     final provider = Provider.of<CulinaryProvider>(context, listen: false);
 
-    // Tampilkan dialog loading singkat
+    // Tampilkan dialog loading saat mencari sinyal GPS
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -30,28 +30,55 @@ class HomeScreen extends StatelessWidget {
           children: [
             CircularProgressIndicator(color: AppColors.primary),
             SizedBox(width: 20),
-            Text('Mendeteksi lokasi...'),
+            Text('Mencari sinyal GPS...'),
           ],
         ),
       ),
     );
 
-    await Future.delayed(const Duration(milliseconds: 700));
+    final success = await provider.fetchRealLocation();
 
     if (!context.mounted) return;
     Navigator.pop(context); // Tutup dialog loading
 
-    // Update state lokasi secara reaktif
-    provider.updateLocation('Sleman, DI Yogyakarta');
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Lokasi berhasil diperbarui: Sleman, DI Yogyakarta'),
-        backgroundColor: AppColors.statusOpen,
-        duration: Duration(seconds: 2),
-      ),
-    );
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lokasi GPS aktif: ${provider.activeLocation}'),
+          backgroundColor: AppColors.statusOpen,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } else {
+      // Dialog pemberitahuan GPS Mati / Izin Ditolak dengan fallback default
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.location_off, color: AppColors.statusClosed),
+              SizedBox(width: 8),
+              Text('GPS Mati / Ditolak', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: const Text(
+            'Layanan lokasi (GPS) tidak aktif atau izin ditolak. Menggunakan lokasi default Yogyakarta Pusat.',
+            style: TextStyle(fontSize: 13, height: 1.4),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+    }
   }
+
+  // Alias untuk backward-compatibility
+  static Future<void> simulasiAmbilLokasi(BuildContext context) => ambilLokasiGps(context);
 
   @override
   Widget build(BuildContext context) {
@@ -157,6 +184,17 @@ class HomeScreen extends StatelessWidget {
                           'Terdekat dari $lokasiSingkat',
                           style: AppTextStyles.headingSmall,
                         ),
+                        if (culinary.isLoadingLocation) ...[
+                          const SizedBox(width: 8),
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     Text(

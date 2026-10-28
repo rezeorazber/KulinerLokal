@@ -1,7 +1,12 @@
+import 'package:carousel_slider/carousel_slider.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kuliner_lokal/main.dart';
+import 'package:kuliner_lokal/models/culinary_place.dart';
+import 'package:kuliner_lokal/models/restaurant_model.dart';
 import 'package:kuliner_lokal/models/review_model.dart';
 import 'package:kuliner_lokal/providers/culinary_provider.dart';
+import 'package:kuliner_lokal/screens/detail_restaurant_screen.dart';
 
 void main() {
   testWidgets('App loads smoke test', (WidgetTester tester) async {
@@ -51,6 +56,87 @@ void main() {
       expect(placeAfterDelete.reviewCount, initialCount);
       expect(placeAfterDelete.reviews.length, initialReviewsCount);
       expect(placeAfterDelete.reviews.any((r) => r.id == 'test_rev_1'), isFalse);
+    });
+  });
+
+  group('RestaurantModel & Multi-Foto Fallback Tests', () {
+    test('RestaurantModel.fromJson uses List images if provided', () {
+      final map = {
+        'id': 'r1',
+        'name': 'Gudeg Wijilan',
+        'images': ['https://img.com/1.jpg', 'https://img.com/2.jpg'],
+      };
+
+      final model = RestaurantModel.fromJson(map);
+      expect(model.images.length, 2);
+      expect(model.images.first, 'https://img.com/1.jpg');
+      expect(model.image, 'https://img.com/1.jpg');
+    });
+
+    test('RestaurantModel.fromFirestore wraps single image String into List<String>', () {
+      final map = {
+        'id': 'r2',
+        'name': 'Bakmi Kadin',
+        'image': 'https://img.com/single.jpg',
+      };
+
+      final model = RestaurantModel.fromFirestore(map);
+      expect(model.images.length, 1);
+      expect(model.images.first, 'https://img.com/single.jpg');
+      expect(model.image, 'https://img.com/single.jpg');
+    });
+
+    test('CulinaryPlace.fromMap backward compatibility with image / images', () {
+      final map = {
+        'id': 'cp1',
+        'name': 'Sate Klathak',
+        'image': 'https://img.com/sate.jpg',
+      };
+
+      final place = CulinaryPlace.fromMap(map);
+      expect(place.images.length, 1);
+      expect(place.images.first, 'https://img.com/sate.jpg');
+      expect(place.imageUrl, 'https://img.com/sate.jpg');
+      expect(place.galleryImages.first, 'https://img.com/sate.jpg');
+    });
+
+    testWidgets('DetailRestaurantScreen renders CarouselSlider', (WidgetTester tester) async {
+      const restaurant = RestaurantModel(
+        id: '',
+        name: 'Resto Demo',
+        images: ['https://example.com/1.jpg', 'https://example.com/2.jpg'],
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: DetailRestaurantScreen(restaurant: restaurant),
+        ),
+      );
+
+      expect(find.byType(CarouselSlider), findsOneWidget);
+    });
+  });
+
+  group('LocationService & GPS Fallback Tests', () {
+    test('CulinaryProvider provides default Yogyakarta Pusat fallback', () {
+      final provider = CulinaryProvider();
+      expect(provider.userLatitude, CulinaryProvider.defaultLatitude);
+      expect(provider.userLongitude, CulinaryProvider.defaultLongitude);
+      expect(provider.activeLocation, CulinaryProvider.defaultLocationName);
+    });
+
+    test('Updating location recalculates real distances across all places', () {
+      final provider = CulinaryProvider();
+      final initialDistances = provider.allPlaces.map((p) => p.distanceKm).toList();
+
+      // Change location to Sleman
+      provider.updateLocation('Sleman, DI Yogyakarta');
+      final updatedDistances = provider.allPlaces.map((p) => p.distanceKm).toList();
+
+      // Distances must be updated and recalculated
+      expect(provider.userLatitude, -7.7121);
+      expect(provider.userLongitude, 110.3589);
+      expect(updatedDistances, isNot(equals(initialDistances)));
     });
   });
 }
